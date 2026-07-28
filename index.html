@@ -374,8 +374,8 @@ html, body { height: 100%; overflow: hidden; font-family: 'Outfit', sans-serif; 
 #aia-btn-close:hover { color: var(--cream); }
 
 /* ── Visite : agrandissement de la photo / réduction de la carte ── */
+/* flex-basis de #visite-map-wrap piloté directement en JS (voir toggleVisitePhotoZoom) */
 #visite-map-wrap, #visite-photo-wrap { transition: flex-basis .32s ease; }
-#visite-overlay.photo-zoomed #visite-map-wrap { flex-basis: 9vh; }
 #visite-zoom-btn {
   position: absolute; top: 8px; right: 10px; z-index: 520;
   width: 32px; height: 32px; border-radius: 50%; border: none;
@@ -2079,16 +2079,23 @@ function stopVisite(){
 
 // ── Agrandissement de la photo / réduction de la carte (visite) ──
 let _visitePhotoZoomLocked = false;
+function _setVisiteMapWrapZoomed(zoomed){
+  const ov = document.getElementById('visite-overlay');
+  const mapWrap = document.getElementById('visite-map-wrap');
+  if (ov) ov.classList.toggle('photo-zoomed', zoomed);
+  // Le style inline "flex:0 0 38vh" posé sur #visite-map-wrap l'emporte sur
+  // la règle CSS externe : on doit donc modifier flex-basis directement en JS.
+  if (mapWrap) mapWrap.style.flexBasis = zoomed ? '9vh' : '38vh';
+}
 function resetVisitePhotoZoom(){
   _visitePhotoZoomLocked = false;
-  const ov = document.getElementById('visite-overlay');
-  if (ov) ov.classList.remove('photo-zoomed');
+  _setVisiteMapWrapZoomed(false);
   const btn = document.getElementById('visite-zoom-btn');
   if (btn) btn.textContent = '⛶';
 }
 function toggleVisitePhotoZoom(){
   _visitePhotoZoomLocked = !_visitePhotoZoomLocked;
-  document.getElementById('visite-overlay').classList.toggle('photo-zoomed', _visitePhotoZoomLocked);
+  _setVisiteMapWrapZoomed(_visitePhotoZoomLocked);
   const btn = document.getElementById('visite-zoom-btn');
   if (btn) btn.textContent = _visitePhotoZoomLocked ? '⤢' : '⛶';
   setTimeout(()=>{ _vMap && _vMap.invalidateSize(); }, 340);
@@ -2096,12 +2103,12 @@ function toggleVisitePhotoZoom(){
 // Sur un appareil avec souris, un simple survol agrandit temporairement la photo
 function visitePhotoHoverIn(){
   if (_visitePhotoZoomLocked) return;
-  document.getElementById('visite-overlay').classList.add('photo-zoomed');
+  _setVisiteMapWrapZoomed(true);
   setTimeout(()=>{ _vMap && _vMap.invalidateSize(); }, 340);
 }
 function visitePhotoHoverOut(){
   if (_visitePhotoZoomLocked) return;
-  document.getElementById('visite-overlay').classList.remove('photo-zoomed');
+  _setVisiteMapWrapZoomed(false);
   setTimeout(()=>{ _vMap && _vMap.invalidateSize(); }, 340);
 }
 
