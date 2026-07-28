@@ -373,6 +373,19 @@ html, body { height: 100%; overflow: hidden; font-family: 'Outfit', sans-serif; 
 }
 #aia-btn-close:hover { color: var(--cream); }
 
+/* ── Visite : agrandissement de la photo / réduction de la carte ── */
+#visite-map-wrap, #visite-photo-wrap { transition: flex-basis .32s ease; }
+#visite-overlay.photo-zoomed #visite-map-wrap { flex-basis: 9vh; }
+#visite-zoom-btn {
+  position: absolute; top: 8px; right: 10px; z-index: 520;
+  width: 32px; height: 32px; border-radius: 50%; border: none;
+  background: rgba(0,0,0,.45); color: #b8d4a0; font-size: .95rem;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+}
+#visite-zoom-btn:hover { background: rgba(0,0,0,.7); color: var(--snow); }
+#visite-photo, #visite-no-photo { cursor: pointer; }
+
 </style>
 </head>
 <body>
@@ -483,7 +496,7 @@ html, body { height: 100%; overflow: hidden; font-family: 'Outfit', sans-serif; 
 
   <!-- OVERLAY PLEIN ECRAN VISITE -->
   <div id="visite-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:10000;background:#000;display:none;flex-direction:column;padding-top:env(safe-area-inset-top);">
-    <div style="flex:0 0 38vh;position:relative;min-height:0;">
+    <div style="flex:0 0 38vh;position:relative;min-height:0;" id="visite-map-wrap">
       <div id="visite-map" style="width:100%;height:100%;"></div>
       <div style="position:absolute;top:0;left:0;right:0;background:linear-gradient(rgba(0,0,0,.7),transparent);padding:8px 14px;display:flex;align-items:center;gap:10px;z-index:500;">
         <span id="visite-prog-txt" style="font-family:monospace;font-size:.72rem;color:#b8d4a0;flex-shrink:0;">1 / 1</span>
@@ -493,9 +506,10 @@ html, body { height: 100%; overflow: hidden; font-family: 'Outfit', sans-serif; 
       </div>
       <button onclick="stopVisite()" style="position:absolute;top:8px;right:12px;width:34px;height:34px;border-radius:50%;background:rgba(200,75,26,.7);border:none;color:white;font-size:.9rem;cursor:pointer;z-index:600;">&#x2715;</button>
     </div>
-    <div style="flex:1 1 auto;min-height:0;position:relative;background:#0a0f07;display:flex;align-items:center;justify-content:center;overflow:hidden;">
-      <img id="visite-photo" src="" alt="" style="max-width:100%;max-height:100%;object-fit:contain;display:none;">
-      <div id="visite-no-photo" style="font-size:4rem;opacity:.2;display:none;">🏔</div>
+    <div style="flex:1 1 auto;min-height:0;position:relative;background:#0a0f07;display:flex;align-items:center;justify-content:center;overflow:hidden;" id="visite-photo-wrap" onmouseenter="visitePhotoHoverIn()" onmouseleave="visitePhotoHoverOut()">
+      <img id="visite-photo" src="" alt="" onclick="toggleVisitePhotoZoom()" style="max-width:100%;max-height:100%;object-fit:contain;display:none;">
+      <div id="visite-no-photo" onclick="toggleVisitePhotoZoom()" style="font-size:4rem;opacity:.2;display:none;">🏔</div>
+      <button id="visite-zoom-btn" onclick="toggleVisitePhotoZoom()" title="Agrandir / réduire la photo">⛶</button>
       <div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.88));padding:14px 16px;max-height:50%;overflow-y:auto;">
         <div id="visite-wp-name" style="font-family:monospace;font-size:.95rem;font-weight:700;color:#7aad5a;margin-bottom:3px;"></div>
         <div id="visite-wp-comment" style="font-size:.78rem;color:#b8d4a0;line-height:1.5;"></div>
@@ -2043,6 +2057,7 @@ function initVisiteMap(){
 function startVisite(){
   if(!state.waypoints.length) return;
   _vIdx=0;
+  resetVisitePhotoZoom();
   document.getElementById('visite-overlay').style.display='flex';
   setTimeout(()=>{ initVisiteMap(); _vMap.invalidateSize(); vShowSlide(_vIdx); },80);
   // Precharger les voix TTS (Android : getVoices() peut etre vide au depart)
@@ -2057,8 +2072,37 @@ function startVisite(){
 function stopVisite(){
   window.speechSynthesis && window.speechSynthesis.cancel();
   document.getElementById('visite-overlay').style.display='none';
+  resetVisitePhotoZoom();
   if(_vTravM){_vMap.removeLayer(_vTravM);_vTravM=null;}
   if(_vWpM){_vMap.removeLayer(_vWpM);_vWpM=null;}
+}
+
+// ── Agrandissement de la photo / réduction de la carte (visite) ──
+let _visitePhotoZoomLocked = false;
+function resetVisitePhotoZoom(){
+  _visitePhotoZoomLocked = false;
+  const ov = document.getElementById('visite-overlay');
+  if (ov) ov.classList.remove('photo-zoomed');
+  const btn = document.getElementById('visite-zoom-btn');
+  if (btn) btn.textContent = '⛶';
+}
+function toggleVisitePhotoZoom(){
+  _visitePhotoZoomLocked = !_visitePhotoZoomLocked;
+  document.getElementById('visite-overlay').classList.toggle('photo-zoomed', _visitePhotoZoomLocked);
+  const btn = document.getElementById('visite-zoom-btn');
+  if (btn) btn.textContent = _visitePhotoZoomLocked ? '⤢' : '⛶';
+  setTimeout(()=>{ _vMap && _vMap.invalidateSize(); }, 340);
+}
+// Sur un appareil avec souris, un simple survol agrandit temporairement la photo
+function visitePhotoHoverIn(){
+  if (_visitePhotoZoomLocked) return;
+  document.getElementById('visite-overlay').classList.add('photo-zoomed');
+  setTimeout(()=>{ _vMap && _vMap.invalidateSize(); }, 340);
+}
+function visitePhotoHoverOut(){
+  if (_visitePhotoZoomLocked) return;
+  document.getElementById('visite-overlay').classList.remove('photo-zoomed');
+  setTimeout(()=>{ _vMap && _vMap.invalidateSize(); }, 340);
 }
 
 // ── Affichage d'une étape, avec animation optionnelle depuis la précédente ──
@@ -2158,7 +2202,7 @@ async function exportVisite(){
   const slidesData=JSON.stringify(slides);
   const title=state.rawFileName||'Visite';
   const LAYER=state.mapLayer;
-  const css='@keyframes ma-fw{to{stroke-dashoffset:-22}}.ma-trail-export{stroke-linecap:round;animation:ma-fw .55s linear infinite;}*{box-sizing:border-box;margin:0;padding:0}html{height:100%}body{background:#000;font-family:system-ui;color:#f0ebe0;height:100dvh;overflow:hidden;display:flex;flex-direction:column}#vmap-wrap{flex:0 0 38vh;position:relative;min-height:0}#vmap{width:100%;height:100%}#hud{position:absolute;top:0;left:0;right:0;background:linear-gradient(rgba(0,0,0,.7),transparent);padding:8px 14px;display:flex;align-items:center;gap:10px;z-index:500}#prog-txt{font-family:monospace;font-size:.72rem;color:#b8d4a0;flex-shrink:0}#prog-bar{flex:1;height:3px;background:rgba(255,255,255,.15);border-radius:2px;overflow:hidden}#prog-fill{height:100%;background:#7aad5a;border-radius:2px;transition:width .4s}#photo-wrap{flex:1 1 auto;min-height:0;position:relative;background:#0a0f07;display:flex;align-items:center;justify-content:center;overflow:hidden}#slide-photo{max-width:100%;max-height:100%;object-fit:contain;display:none}#no-photo{font-size:5rem;opacity:.15}#info-bar{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.92));padding:14px 16px;max-height:45%}#wp-name{font-family:monospace;font-size:.95rem;font-weight:700;color:#7aad5a;margin-bottom:3px}#wp-comment{font-size:.78rem;color:#b8d4a0;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}#controls{flex:0 0 auto;display:flex;gap:8px;justify-content:center;padding:12px 10px;padding-bottom:calc(12px + env(safe-area-inset-bottom));background:#0d1a09;border-top:1px solid rgba(255,255,255,.08)}.ctrl-btn{padding:13px 18px;border-radius:24px;border:none;font-size:.82rem;font-weight:600;cursor:pointer;font-family:system-ui;-webkit-tap-highlight-color:transparent}.ctrl-btn:disabled{opacity:.35;cursor:default}#btn-next,#btn-prev{background:rgba(255,255,255,.14);color:#b8d4a0;min-width:80px}#btn-tts{background:rgba(74,124,53,.9);color:#f8f5ee;flex:1;max-width:200px}';
+  const css='@keyframes ma-fw{to{stroke-dashoffset:-22}}.ma-trail-export{stroke-linecap:round;animation:ma-fw .55s linear infinite;}*{box-sizing:border-box;margin:0;padding:0}html{height:100%}body{background:#000;font-family:system-ui;color:#f0ebe0;height:100dvh;overflow:hidden;display:flex;flex-direction:column}#vmap-wrap{flex:0 0 38vh;position:relative;min-height:0;transition:flex-basis .32s ease}body.photo-zoomed #vmap-wrap{flex-basis:9vh}#vmap{width:100%;height:100%}#hud{position:absolute;top:0;left:0;right:0;background:linear-gradient(rgba(0,0,0,.7),transparent);padding:8px 14px;display:flex;align-items:center;gap:10px;z-index:500}#prog-txt{font-family:monospace;font-size:.72rem;color:#b8d4a0;flex-shrink:0}#prog-bar{flex:1;height:3px;background:rgba(255,255,255,.15);border-radius:2px;overflow:hidden}#prog-fill{height:100%;background:#7aad5a;border-radius:2px;transition:width .4s}#photo-wrap{flex:1 1 auto;min-height:0;position:relative;background:#0a0f07;display:flex;align-items:center;justify-content:center;overflow:hidden;transition:flex-basis .32s ease}#slide-photo{max-width:100%;max-height:100%;object-fit:contain;display:none;cursor:pointer}#no-photo{font-size:5rem;opacity:.15;cursor:pointer}#zoom-btn{position:absolute;top:8px;right:10px;z-index:520;width:32px;height:32px;border-radius:50%;border:none;background:rgba(0,0,0,.45);color:#b8d4a0;font-size:.95rem;cursor:pointer}#zoom-btn:hover{background:rgba(0,0,0,.7);color:#fff}#info-bar{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.92));padding:14px 16px;max-height:45%}#wp-name{font-family:monospace;font-size:.95rem;font-weight:700;color:#7aad5a;margin-bottom:3px}#wp-comment{font-size:.78rem;color:#b8d4a0;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}#controls{flex:0 0 auto;display:flex;gap:8px;justify-content:center;padding:12px 10px;padding-bottom:calc(12px + env(safe-area-inset-bottom));background:#0d1a09;border-top:1px solid rgba(255,255,255,.08)}.ctrl-btn{padding:13px 18px;border-radius:24px;border:none;font-size:.82rem;font-weight:600;cursor:pointer;font-family:system-ui;-webkit-tap-highlight-color:transparent}.ctrl-btn:disabled{opacity:.35;cursor:default}#btn-next,#btn-prev{background:rgba(255,255,255,.14);color:#b8d4a0;min-width:80px}#btn-tts{background:rgba(74,124,53,.9);color:#f8f5ee;flex:1;max-width:200px}';
   const jsMain=`var slides=${slidesData};var track=${trackData};
 var idx=0;
 var vmap=L.map('vmap',{zoomControl:false,attributionControl:false});
@@ -2279,12 +2323,31 @@ function readComment(){
   window.speechSynthesis.speak(u);
 }
 
-document.addEventListener('keydown',function(e){if(e.key==='ArrowRight')go(1);else if(e.key==='ArrowLeft')go(-1);});`;
+document.addEventListener('keydown',function(e){if(e.key==='ArrowRight')go(1);else if(e.key==='ArrowLeft')go(-1);});
+
+// ── Agrandissement de la photo / reduction de la carte ─────────
+var zoomLocked=false;
+function toggleZoom(){
+  zoomLocked=!zoomLocked;
+  document.body.classList.toggle('photo-zoomed',zoomLocked);
+  document.getElementById('zoom-btn').innerHTML=zoomLocked?'&#10530;':'&#9974;';
+  setTimeout(function(){vmap.invalidateSize();},340);
+}
+function photoHoverIn(){
+  if(zoomLocked)return;
+  document.body.classList.add('photo-zoomed');
+  setTimeout(function(){vmap.invalidateSize();},340);
+}
+function photoHoverOut(){
+  if(zoomLocked)return;
+  document.body.classList.remove('photo-zoomed');
+  setTimeout(function(){vmap.invalidateSize();},340);
+}`;
   const lsrc='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
   const html='<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>'+title+' - Visite</title><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><style>'+css+'</style></head>'
     +'<body><div id="splash" style="display:none"></div>'
     +'<div id="vmap-wrap"><div id="vmap"></div><div id="hud"><span id="prog-txt">1 / '+slides.length+'</span><div id="prog-bar"><div id="prog-fill" style="width:0%"></div></div></div></div>'
-    +'<div id="photo-wrap"><img id="slide-photo" src="" alt=""><div id="no-photo">~</div><div id="info-bar"><div id="wp-name"></div><div id="wp-comment"></div></div>'
+    +'<div id="photo-wrap" onmouseenter="photoHoverIn()" onmouseleave="photoHoverOut()"><img id="slide-photo" src="" alt="" onclick="toggleZoom()"><div id="no-photo" onclick="toggleZoom()">~</div><button id="zoom-btn" onclick="toggleZoom()" title="Agrandir / reduire la photo">&#9974;</button><div id="info-bar"><div id="wp-name"></div><div id="wp-comment"></div></div>'
     +'</div>'
     +'<div id="controls"><button class="ctrl-btn" id="btn-prev" onclick="go(-1)">&laquo; Prec.</button><button class="ctrl-btn" id="btn-tts" onclick="readComment()">Lire le commentaire</button><button class="ctrl-btn" id="btn-next" onclick="go(1)">Suiv. &raquo;</button></div>'
     +'<scr'+'ipt src="'+lsrc+'"></scr'+'ipt>'
