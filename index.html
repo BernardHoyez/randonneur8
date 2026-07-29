@@ -2523,8 +2523,8 @@ function clearSession() {
 
 // Hooks pour déclencher la sauvegarde automatique
 const _origParseKML = parseKML;
-parseKML = function(txt) {
-  _origParseKML(txt);
+parseKML = function(txt, mode) {
+  _origParseKML(txt, mode);
   drawElevProfile();
   saveSession();
 };
