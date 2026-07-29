@@ -6,6 +6,7 @@ PWA d'édition et de partage de randonnées à partir de fichiers **KMZ / KML / 
 
 ### Édition
 - Chargement d'un fichier KMZ, KML ou GPX (import direct, partage depuis un gestionnaire de fichiers Android, ou ouverture via le menu "Ouvrir avec")
+- **Mode d'import Remplacer / Ajouter** : bascule à côté de la zone de dépôt de fichier. "Remplacer" (comportement historique) efface les waypoints et le tracé actuels avant de charger le nouveau fichier. "Ajouter" conserve les waypoints déjà présents (y compris leurs commentaires et photos modifiés) et ajoute à la suite ceux du fichier importé, sans effacer la session en cours ; le tracé existant est conservé tel quel si un tracé est déjà chargé.
 - Affichage du tracé sur fond OSM, Plan IGN V2, Ortho-photo IGN, **ou fichier MBtiles local**, avec animation "chenillard" (fourmis défilantes) cohérente sur tous les fonds de carte
 - **Fond de carte MBtiles** : bouton "📦 MBtiles" pour ouvrir un fichier `.mbtiles` présent sur l'appareil (produit avec MOBAC ou avec la PWA [ign2mbt](https://bernardhoyez.github.io/PWA/ign2mbt/)). La base SQLite est lue directement dans le navigateur (librairie sql.js), sans conversion préalable ni envoi sur un serveur ; la carte se recadre automatiquement sur l'emprise du fichier. Ce fond reste disponible dans l'onglet Visite, utile hors couverture réseau. Il n'est en revanche pas repris dans les exports HTML/déploiement, qui restent basés sur les fonds WMTS en ligne.
 - Ajout, édition et suppression de waypoints (nom, commentaire, photo)

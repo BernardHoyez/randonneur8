@@ -73,6 +73,13 @@ html, body { height: 100%; overflow: hidden; font-family: 'Outfit', sans-serif; 
 }
 .map-btn:hover { color: var(--cream); border-color: var(--fern); }
 .map-btn.active { background: var(--moss); color: var(--snow); border-color: var(--sage); }
+.mode-btn {
+  flex: 1; padding: 6px 8px; font-size: .72rem; font-weight: 500;
+  border: 1px solid rgba(255,255,255,.1); border-radius: 5px;
+  background: rgba(255,255,255,.04); color: var(--stone); cursor: pointer; transition: var(--transition);
+}
+.mode-btn:hover { color: var(--cream); border-color: var(--fern); }
+.mode-btn.active { background: var(--moss); color: var(--snow); border-color: var(--sage); }
 
 #waypoints-list { flex: 1; overflow-y: auto; padding: 8px; }
 #waypoints-list::-webkit-scrollbar { width: 4px; }
@@ -418,6 +425,10 @@ html, body { height: 100%; overflow: hidden; font-family: 'Outfit', sans-serif; 
           <div class="drop-icon">🗺️</div>
           <p>Glissez un fichier <strong>KMZ, KML</strong> ou <strong>GPX</strong> ou cliquez pour parcourir</p>
           <div id="file-name-display">Aucun fichier chargé</div>
+        </div>
+        <div id="import-mode" style="display:flex;gap:6px;margin-top:8px;">
+          <button type="button" class="mode-btn active" id="mode-replace" title="Le fichier importé remplace entièrement les waypoints et le tracé actuels" onclick="setImportMode('replace',this)">🔄 Remplacer</button>
+          <button type="button" class="mode-btn" id="mode-append" title="Les waypoints du fichier importé s'ajoutent à ceux déjà présents, sans les effacer" onclick="setImportMode('append',this)">➕ Ajouter</button>
         </div>
         <div id="map-controls" style="margin-top:10px;">
           <button class="map-btn active" onclick="setLayer('osm',this)">OSM</button>
@@ -813,13 +824,28 @@ dropZone.addEventListener('drop', e => {
   if (f) loadKMZ(f);
 });
 
+// ── MODE D'IMPORT : Remplacer / Ajouter ──────────────
+let _importMode = 'replace';
+function setImportMode(mode, btn) {
+  _importMode = mode;
+  document.querySelectorAll('#import-mode .mode-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
 // ── CHARGEMENT KMZ ───────────────────────────────────
-async function loadKMZ(file) {
+async function loadKMZ(file, modeOverride) {
   if (!file) return;
+  const mode = modeOverride || _importMode;
+  const prevCount = state.waypoints.length;
   try {
     toast('Chargement de ' + file.name + '…');
-    state.rawFileName = file.name.replace(/\.(kmz|kml|gpx)$/i, '');
-    document.getElementById('file-name-display').textContent = file.name;
+    if (mode === 'replace') {
+      state.rawFileName = file.name.replace(/\.(kmz|kml|gpx)$/i, '');
+      document.getElementById('file-name-display').textContent = file.name;
+    } else {
+      const disp = document.getElementById('file-name-display');
+      disp.textContent = (disp.textContent === 'Aucun fichier chargé' ? file.name : disp.textContent + ' + ' + file.name);
+    }
     state._photoMap = {};
     const ext = file.name.split('.').pop().toLowerCase();
 
@@ -835,17 +861,23 @@ async function loadKMZ(file) {
         }
       });
       (await Promise.all(photoPromises)).forEach(p => { state._photoMap[p.name] = p.blob; });
-      parseKML(kmlText);
+      parseKML(kmlText, mode);
     } else if (ext === 'kml') {
       const kmlText = await file.text();
-      parseKML(kmlText);
+      parseKML(kmlText, mode);
     } else if (ext === 'gpx') {
       const gpxText = await file.text();
-      parseGPX(gpxText);
+      parseGPX(gpxText, mode);
     } else {
       throw new Error('Format non supporté : ' + ext);
     }
-    toast(state.waypoints.length + ' waypoints chargés ✓', 'success');
+    if (mode === 'append') {
+      const added = state.waypoints.length - prevCount;
+      toast(added + ' waypoint(s) ajouté(s) — ' + state.waypoints.length + ' au total ✓', 'success');
+    } else {
+      toast(state.waypoints.length + ' waypoints chargés ✓', 'success');
+    }
+    saveSession();
   } catch (err) {
     toast('Erreur : ' + err.message, 'error');
     console.error(err);
@@ -882,21 +914,40 @@ function addMarchingAntsTrack(coords) {
 }
 
 // ── PARSEUR KML ──────────────────────────────────────
-function parseKML(txt) {
+function parseKML(txt, mode) {
+  mode = mode || 'replace';
   const doc = new DOMParser().parseFromString(txt, 'application/xml');
-  state.waypoints = [];
-  state.trackCoords = [];
-  map.eachLayer(l => { if (l._isWp || l._isTrack) map.removeLayer(l); });
 
-  doc.querySelectorAll('LineString coordinates').forEach(cs => {
-    state.trackCoords.push(...parseCoords(cs.textContent));
-  });
-
-  if (state.trackCoords.length > 1) {
-    const pl = addMarchingAntsTrack(state.trackCoords.map(c => [c[0],c[1]]));
-    map.fitBounds(pl.getBounds(), { padding:[40,40] });
+  if (mode === 'replace') {
+    state.waypoints = [];
+    state.trackCoords = [];
+    map.eachLayer(l => { if (l._isWp || l._isTrack) map.removeLayer(l); });
   }
 
+  const newTrack = [];
+  doc.querySelectorAll('LineString coordinates').forEach(cs => {
+    newTrack.push(...parseCoords(cs.textContent));
+  });
+
+  if (mode === 'replace') {
+    state.trackCoords = newTrack;
+    if (state.trackCoords.length > 1) {
+      const pl = addMarchingAntsTrack(state.trackCoords.map(c => [c[0],c[1]]));
+      map.fitBounds(pl.getBounds(), { padding:[40,40] });
+    }
+  } else if (newTrack.length > 1) {
+    if (!state.trackCoords.length) {
+      // Pas de tracé existant : on adopte celui du fichier ajouté
+      state.trackCoords = newTrack;
+      const pl = addMarchingAntsTrack(state.trackCoords.map(c => [c[0],c[1]]));
+      map.fitBounds(pl.getBounds(), { padding:[40,40] });
+    } else {
+      toast('Tracé du fichier ajouté ignoré (un tracé est déjà présent)', 'info');
+    }
+  }
+
+  let nextId = state.waypoints.reduce((m,w) => Math.max(m, w.id), -1) + 1;
+  const newWps = [];
   let idx = 0;
   doc.querySelectorAll('Placemark').forEach(pm => {
     const pt = pm.querySelector('Point');
@@ -906,19 +957,21 @@ function parseKML(txt) {
     const coords = parseCoords(coordEl.textContent);
     if (!coords.length) return;
     const [lat, lon, alt] = coords[0];
-    const name = pm.querySelector('name')?.textContent.trim() || ('Waypoint ' + (idx+1));
+    const name = pm.querySelector('name')?.textContent.trim() || ('Waypoint ' + (++idx));
     const desc = pm.querySelector('description')?.textContent || '';
     const imgMatch = desc.match(/src=["']?([^"'\s>]+\.(jpg|jpeg|png|webp|gif))/i);
     const photoName = imgMatch ? imgMatch[1].split('/').pop() : null;
-    state.waypoints.push({
-      id: idx++, name, lat, lon, alt: alt||0, comment: '',
+    const wp = {
+      id: nextId++, name, lat, lon, alt: alt||0, comment: '',
       photoName: photoName||null,
       photoBlob: (photoName && state._photoMap[photoName]) ? state._photoMap[photoName] : null,
       photoOptimized: null, marker: null, _optimizedFname: null,
-    });
+    };
+    state.waypoints.push(wp);
+    newWps.push(wp);
   });
 
-  state.waypoints.forEach(addMarker);
+  newWps.forEach(addMarker);
   renderList();
   updateStats();
   document.getElementById('btn-download').disabled = false;
@@ -932,52 +985,72 @@ function parseCoords(str) {
 }
 
 // ── PARSEUR GPX ──────────────────────────────────────
-function parseGPX(txt) {
+function parseGPX(txt, mode) {
+  mode = mode || 'replace';
   const doc = new DOMParser().parseFromString(txt, 'application/xml');
-  state.waypoints = [];
-  state.trackCoords = [];
-  map.eachLayer(l => { if (l._isWp || l._isTrack) map.removeLayer(l); });
+
+  if (mode === 'replace') {
+    state.waypoints = [];
+    state.trackCoords = [];
+    map.eachLayer(l => { if (l._isWp || l._isTrack) map.removeLayer(l); });
+  }
 
   // Tracé — trkpt
+  const newTrack = [];
   doc.querySelectorAll('trkpt').forEach(pt => {
     const lat = +pt.getAttribute('lat');
     const lon = +pt.getAttribute('lon');
     const ele = +( pt.querySelector('ele')?.textContent || 0 );
-    if (!isNaN(lat) && !isNaN(lon)) state.trackCoords.push([lat, lon, ele]);
+    if (!isNaN(lat) && !isNaN(lon)) newTrack.push([lat, lon, ele]);
   });
 
   // Tracé alternatif — rtept (route)
-  if (!state.trackCoords.length) {
+  if (!newTrack.length) {
     doc.querySelectorAll('rtept').forEach(pt => {
       const lat = +pt.getAttribute('lat');
       const lon = +pt.getAttribute('lon');
       const ele = +( pt.querySelector('ele')?.textContent || 0 );
-      if (!isNaN(lat) && !isNaN(lon)) state.trackCoords.push([lat, lon, ele]);
+      if (!isNaN(lat) && !isNaN(lon)) newTrack.push([lat, lon, ele]);
     });
   }
 
-  if (state.trackCoords.length > 1) {
-    const pl = addMarchingAntsTrack(state.trackCoords.map(c => [c[0],c[1]]));
-    map.fitBounds(pl.getBounds(), { padding:[40,40] });
+  if (mode === 'replace') {
+    state.trackCoords = newTrack;
+    if (state.trackCoords.length > 1) {
+      const pl = addMarchingAntsTrack(state.trackCoords.map(c => [c[0],c[1]]));
+      map.fitBounds(pl.getBounds(), { padding:[40,40] });
+    }
+  } else if (newTrack.length > 1) {
+    if (!state.trackCoords.length) {
+      state.trackCoords = newTrack;
+      const pl = addMarchingAntsTrack(state.trackCoords.map(c => [c[0],c[1]]));
+      map.fitBounds(pl.getBounds(), { padding:[40,40] });
+    } else {
+      toast('Tracé du fichier ajouté ignoré (un tracé est déjà présent)', 'info');
+    }
   }
 
   // Waypoints — wpt
+  let nextId = state.waypoints.reduce((m,w) => Math.max(m, w.id), -1) + 1;
+  const newWps = [];
   let idx = 0;
   doc.querySelectorAll('wpt').forEach(wpt => {
     const lat  = +wpt.getAttribute('lat');
     const lon  = +wpt.getAttribute('lon');
     const alt  = +( wpt.querySelector('ele')?.textContent || 0 );
-    const name = wpt.querySelector('name')?.textContent.trim() || ('Waypoint ' + (idx+1));
+    const name = wpt.querySelector('name')?.textContent.trim() || ('Waypoint ' + (++idx));
     const desc = wpt.querySelector('desc')?.textContent.trim() || '';
     if (isNaN(lat) || isNaN(lon)) return;
-    state.waypoints.push({
-      id: idx++, name, lat, lon, alt, comment: desc,
+    const wp = {
+      id: nextId++, name, lat, lon, alt, comment: desc,
       photoName: null, photoBlob: null, photoOptimized: null,
       marker: null, _optimizedFname: null,
-    });
+    };
+    state.waypoints.push(wp);
+    newWps.push(wp);
   });
 
-  state.waypoints.forEach(addMarker);
+  newWps.forEach(addMarker);
   renderList();
   updateStats();
   drawElevProfile();
@@ -2480,7 +2553,7 @@ if ('launchQueue' in window) {
     if (!launchParams.files || !launchParams.files.length) return;
     const fileHandle = launchParams.files[0];
     const file = await fileHandle.getFile();
-    if (/\.(kmz|kml)$/i.test(file.name)) loadKMZ(file);
+    if (/\.(kmz|kml)$/i.test(file.name)) loadKMZ(file, 'replace');
   });
 }
 
