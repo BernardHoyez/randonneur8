@@ -427,8 +427,8 @@ html, body { height: 100%; overflow: hidden; font-family: 'Outfit', sans-serif; 
           <div id="file-name-display">Aucun fichier chargé</div>
         </div>
         <div id="import-mode" style="display:flex;gap:6px;margin-top:8px;">
-          <button type="button" class="mode-btn active" id="mode-replace" title="Le fichier importé remplace entièrement les waypoints et le tracé actuels" onclick="setImportMode('replace',this)">🔄 Remplacer</button>
-          <button type="button" class="mode-btn" id="mode-append" title="Les waypoints du fichier importé s'ajoutent à ceux déjà présents, sans les effacer" onclick="setImportMode('append',this)">➕ Ajouter</button>
+          <button type="button" class="mode-btn active" id="mode-replace" title="Choisir un fichier qui remplacera entièrement les waypoints et le tracé actuels" onclick="setImportMode('replace',this)">🔄 Remplacer</button>
+          <button type="button" class="mode-btn" id="mode-append" title="Choisir un fichier dont les waypoints s'ajouteront à ceux déjà présents, sans les effacer" onclick="setImportMode('append',this)">➕ Ajouter</button>
         </div>
         <div id="map-controls" style="margin-top:10px;">
           <button class="map-btn active" onclick="setLayer('osm',this)">OSM</button>
@@ -830,6 +830,7 @@ function setImportMode(mode, btn) {
   _importMode = mode;
   document.querySelectorAll('#import-mode .mode-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  document.getElementById('kmz-input').click();
 }
 
 // ── CHARGEMENT KMZ ───────────────────────────────────
