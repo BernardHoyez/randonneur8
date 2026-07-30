@@ -452,6 +452,11 @@ html, body { height: 100%; overflow: hidden; font-family: 'Outfit', sans-serif; 
         <div class="stat">D+ : <strong id="stat-dp" style="color:#7aad5a">—</strong></div>
         <div class="stat">D- : <strong id="stat-dm" style="color:#e07060">—</strong></div>
       </div>
+      <div id="kmz-save-bar" style="padding:8px 16px;border-top:1px solid rgba(255,255,255,.06);">
+        <button id="btn-save-kmz" class="btn-enlarge" style="width:100%;" onclick="saveSessionKMZ()" disabled title="Enregistrer les waypoints et le tracé actuels dans un fichier KMZ autonome (photos incluses), pour partage avec d'autres appareils ou applications">
+          💾 Sauvegarder la session en KMZ
+        </button>
+      </div>
     </div>
     <div id="map-container">
       <div id="map"></div>
@@ -979,7 +984,15 @@ function parseKML(txt, mode) {
   newWps.forEach(addMarker);
   renderList();
   updateStats();
-  document.getElementById('btn-download').disabled = false;
+  updateExportButtons();
+}
+
+function updateExportButtons() {
+  const ok = state.waypoints.length > 0;
+  const bd = document.getElementById('btn-download');
+  const bk = document.getElementById('btn-save-kmz');
+  if (bd) bd.disabled = !ok;
+  if (bk) bk.disabled = !ok;
 }
 
 function parseCoords(str) {
@@ -1059,7 +1072,7 @@ function parseGPX(txt, mode) {
   renderList();
   updateStats();
   drawElevProfile();
-  document.getElementById('btn-download').disabled = false;
+  updateExportButtons();
   saveSession();
 }
 
@@ -1584,6 +1597,80 @@ function buildGPX() {
   const wpts = state.waypoints.map(wp=>'<wpt lat="'+wp.lat+'" lon="'+wp.lon+'"><ele>'+(wp.alt||0)+'</ele><name>'+x(wp.name)+'</name>'+(wp.comment?'<desc>'+x(wp.comment)+'</desc>':'')+'</wpt>').join('\n');
   const trkpts = state.trackCoords.map(c=>'<trkpt lat="'+c[0]+'" lon="'+c[1]+'"><ele>'+(c[2]||0)+'</ele></trkpt>').join('\n');
   return '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Marando" xmlns="http://www.topografix.com/GPX/1/1">\n'+wpts+'\n<trk><name>'+x(state.rawFileName)+'</name><trkseg>\n'+trkpts+'\n</trkseg></trk>\n</gpx>';
+}
+
+// ═══════════════════════════════════════════════════
+//  SAUVEGARDE DE LA SESSION EN KMZ AUTONOME
+//  (waypoints + photos + commentaires + tracé, dans un
+//  seul fichier partageable avec d'autres appareils/apps)
+// ═══════════════════════════════════════════════════
+
+function buildSessionKML() {
+  const x = s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+  const track = state.trackCoords.length>1
+    ? '<Placemark><name>Tracé</name><Style><LineStyle><color>ff5aad7a</color><width>3</width></LineStyle></Style><LineString><altitudeMode>clampToGround</altitudeMode><coordinates>'+state.trackCoords.map(c=>c[1]+','+c[0]+','+(c[2]||0)).join('\n')+'</coordinates></LineString></Placemark>' : '';
+  const wpts = state.waypoints.map(wp=>{
+    const photoTag = wp._sessionPhotoFname ? '<img src="files/'+wp._sessionPhotoFname+'" width="400" /><br/>' : '';
+    const descr = (photoTag || wp.comment) ? '<description><![CDATA['+photoTag+x(wp.comment||'')+']]></description>' : '';
+    return '<Placemark><name>'+x(wp.name)+'</name>'+descr+'<Point><coordinates>'+wp.lon+','+wp.lat+','+(wp.alt||0)+'</coordinates></Point></Placemark>';
+  }).join('\n');
+  return '<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>'+x(state.rawFileName||'randonnee')+'</name>\n'+track+'\n'+wpts+'\n</Document></kml>';
+}
+
+async function saveSessionKMZ() {
+  if (!state.waypoints.length) return;
+  const btn = document.getElementById('btn-save-kmz');
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Génération du KMZ…';
+  try {
+    const zip = new JSZip();
+    const filesFolder = zip.folder('files');
+
+    const photoWps = state.waypoints.filter(w => w.photoBlob);
+    for (let i = 0; i < photoWps.length; i++) {
+      const wp = photoWps[i];
+      if (!wp.photoOptimized) wp.photoOptimized = await optimizePhoto(wp.photoBlob);
+      const fname = sanitize(wp.photoName ? wp.photoName.replace(/\.[^.]+$/, '') : sanitize(wp.name)) + '.jpg';
+      wp._sessionPhotoFname = fname;
+      filesFolder.file(fname, wp.photoOptimized);
+    }
+    state.waypoints.forEach(wp => { if (!wp.photoBlob) wp._sessionPhotoFname = null; });
+
+    zip.file('doc.kml', buildSessionKML());
+
+    const fileName = (sanitize(state.rawFileName) || 'randonnee') + '.kmz';
+    const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.google-earth.kmz', compression: 'DEFLATE' });
+
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: fileName,
+          types: [{ description: 'Fichier KMZ', accept: { 'application/vnd.google-earth.kmz': ['.kmz'] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        toast('"' + fileName + '" enregistré ✓', 'success');
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') { toast('Enregistrement annulé', ''); return; }
+        console.error(err);
+        // repli sur le téléchargement classique
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('"' + fileName + '" téléchargé ✓', 'success');
+  } catch (err) {
+    toast('Erreur lors de la génération du KMZ : ' + err.message, 'error');
+    console.error(err);
+  } finally {
+    btn.disabled = false; btn.textContent = orig;
+  }
 }
 
 function buildViewer(folderName, kmlStr, gpxStr) {
@@ -2515,6 +2602,7 @@ async function loadSession() {
     drawElevProfile();
 
     document.getElementById('btn-download').disabled = false;
+    updateExportButtons();
     const badge = document.getElementById('session-badge');
     badge.style.display = 'block';
     badge.textContent = '💾 Session du ' + new Date(data.savedAt).toLocaleString('fr-FR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) + ' restaurée';
