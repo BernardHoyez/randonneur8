@@ -962,8 +962,12 @@ function parseKML(txt, mode) {
     const desc = pm.querySelector('description')?.textContent || '';
     const imgMatch = desc.match(/src=["']?([^"'\s>]+\.(jpg|jpeg|png|webp|gif))/i);
     const photoName = imgMatch ? imgMatch[1].split('/').pop() : null;
+    // Le commentaire est le texte de la description, débarrassé des balises
+    // HTML éventuelles (ex. <img>, <br/>) qu'un autre outil (ex. photo2waypoint)
+    // peut y avoir insérées pour référencer la photo associée.
+    const comment = desc.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
     const wp = {
-      id: nextId++, name, lat, lon, alt: alt||0, comment: '',
+      id: nextId++, name, lat, lon, alt: alt||0, comment,
       photoName: photoName||null,
       photoBlob: (photoName && state._photoMap[photoName]) ? state._photoMap[photoName] : null,
       photoOptimized: null, marker: null, _optimizedFname: null,
@@ -1567,9 +1571,10 @@ function buildKML(folderName) {
   const track = state.trackCoords.length>1
     ? '<Placemark><name>Tracé</name><Style><LineStyle><color>ff5aad7a</color><width>3</width></LineStyle></Style><LineString><altitudeMode>clampToGround</altitudeMode><coordinates>'+state.trackCoords.map(c=>c[1]+','+c[0]+','+(c[2]||0)).join('\n')+'</coordinates></LineString></Placemark>' : '';
   const wpts = state.waypoints.map(wp=>{
-    const photo = wp._optimizedFname ? '<description><![CDATA[<img src="photos/'+wp._optimizedFname+'" style="max-width:300px">]]></description>' : '';
+    const photoTag = wp._optimizedFname ? '<img src="photos/'+wp._optimizedFname+'" style="max-width:300px"><br>' : '';
+    const descr = (photoTag || wp.comment) ? '<description><![CDATA['+photoTag+x(wp.comment||'')+']]></description>' : '';
     const cmt = wp.comment ? '<ExtendedData><Data name="comment"><value>'+x(wp.comment)+'</value></Data></ExtendedData>' : '';
-    return '<Placemark><name>'+x(wp.name)+'</name>'+photo+cmt+'<Point><coordinates>'+wp.lon+','+wp.lat+','+(wp.alt||0)+'</coordinates></Point></Placemark>';
+    return '<Placemark><name>'+x(wp.name)+'</name>'+descr+cmt+'<Point><coordinates>'+wp.lon+','+wp.lat+','+(wp.alt||0)+'</coordinates></Point></Placemark>';
   }).join('\n');
   return '<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>'+x(folderName)+'</name>\n'+track+'\n'+wpts+'\n</Document></kml>';
 }
