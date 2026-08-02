@@ -2223,6 +2223,13 @@ function initVisiteMap(){
     applyDash();
     _vMap.on('zoomend moveend baselayerchange', ()=>requestAnimationFrame(applyDash));
     _vMap.fitBounds(ants.getBounds(),{padding:[20,20]});
+  } else if(state.waypoints.length>1){
+    // Pas de tracé continu (ex. waypoints issus de photo2waypoint) : on cadre sur les waypoints
+    _vMap.fitBounds(L.latLngBounds(state.waypoints.map(w=>[w.lat,w.lon])),{padding:[30,30]});
+  } else if(state.waypoints.length===1){
+    _vMap.setView([state.waypoints[0].lat,state.waypoints[0].lon],15);
+  } else {
+    _vMap.setView([46.5,2.5],6);
   }
 }
 
