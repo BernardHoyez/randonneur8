@@ -1580,12 +1580,18 @@ async function generatePackage() {
 }
 
 function buildKML(folderName) {
-  const x = s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+  // Échappement pour le texte d'un élément XML (hors CDATA) : seuls &, <
+  // et > doivent l'être. Échapper aussi ' et " n'est pas nécessaire ici
+  // (on n'est jamais dans un attribut) et rend le texte moins lisible.
+  const x = s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // Dans une section CDATA, le texte est pris tel quel : seule la
+  // séquence de terminaison "]]>" doit être neutralisée.
+  const cd = s=>String(s).replace(/]]>/g,']]'+'&gt;');
   const track = state.trackCoords.length>1
     ? '<Placemark><name>Tracé</name><Style><LineStyle><color>ff5aad7a</color><width>3</width></LineStyle></Style><LineString><altitudeMode>clampToGround</altitudeMode><coordinates>'+state.trackCoords.map(c=>c[1]+','+c[0]+','+(c[2]||0)).join('\n')+'</coordinates></LineString></Placemark>' : '';
   const wpts = state.waypoints.map(wp=>{
     const photoTag = wp._optimizedFname ? '<img src="photos/'+wp._optimizedFname+'" style="max-width:300px"><br>' : '';
-    const descr = (photoTag || wp.comment) ? '<description><![CDATA['+photoTag+x(wp.comment||'')+']]></description>' : '';
+    const descr = (photoTag || wp.comment) ? '<description><![CDATA['+photoTag+cd(wp.comment||'')+']]></description>' : '';
     const cmt = wp.comment ? '<ExtendedData><Data name="comment"><value>'+x(wp.comment)+'</value></Data></ExtendedData>' : '';
     return '<Placemark><name>'+x(wp.name)+'</name>'+descr+cmt+'<Point><coordinates>'+wp.lon+','+wp.lat+','+(wp.alt||0)+'</coordinates></Point></Placemark>';
   }).join('\n');
@@ -1606,12 +1612,13 @@ function buildGPX() {
 // ═══════════════════════════════════════════════════
 
 function buildSessionKML() {
-  const x = s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+  const x = s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const cd = s=>String(s).replace(/]]>/g,']]'+'&gt;');
   const track = state.trackCoords.length>1
     ? '<Placemark><name>Tracé</name><Style><LineStyle><color>ff5aad7a</color><width>3</width></LineStyle></Style><LineString><altitudeMode>clampToGround</altitudeMode><coordinates>'+state.trackCoords.map(c=>c[1]+','+c[0]+','+(c[2]||0)).join('\n')+'</coordinates></LineString></Placemark>' : '';
   const wpts = state.waypoints.map(wp=>{
     const photoTag = wp._sessionPhotoFname ? '<img src="files/'+wp._sessionPhotoFname+'" width="400" /><br/>' : '';
-    const descr = (photoTag || wp.comment) ? '<description><![CDATA['+photoTag+x(wp.comment||'')+']]></description>' : '';
+    const descr = (photoTag || wp.comment) ? '<description><![CDATA['+photoTag+cd(wp.comment||'')+']]></description>' : '';
     return '<Placemark><name>'+x(wp.name)+'</name>'+descr+'<Point><coordinates>'+wp.lon+','+wp.lat+','+(wp.alt||0)+'</coordinates></Point></Placemark>';
   }).join('\n');
   return '<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>'+x(state.rawFileName||'randonnee')+'</name>\n'+track+'\n'+wpts+'\n</Document></kml>';
