@@ -1,4 +1,4 @@
-const VERSION = 'randonneur8-v7';
+const VERSION = 'randonneur8-v8';
 const SCOPE   = '/randonneur8/';
 
 self.addEventListener('install', () => self.skipWaiting());

@@ -2408,6 +2408,13 @@ if(track.length>1){
   // Reappliquer apres tout changement de couche/zoom : Leaflet peut recreer le <path>
   vmap.on('zoomend moveend baselayerchange', function(){ requestAnimationFrame(applyDash); });
   vmap.fitBounds(tl.getBounds(),{padding:[16,16]});
+} else if(slides.length>1){
+  // Pas de trace continue (ex. waypoints issus de photo2waypoint) : on cadre sur les points
+  vmap.fitBounds(L.latLngBounds(slides.map(function(s){return [s.lat,s.lon];})),{padding:[24,24]});
+} else if(slides.length===1){
+  vmap.setView([slides[0].lat,slides[0].lon],15);
+} else {
+  vmap.setView([46.5,2.5],6);
 }
 
 document.getElementById('splash').style.display='none';
